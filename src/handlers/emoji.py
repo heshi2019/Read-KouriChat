@@ -14,7 +14,7 @@ from datetime import datetime
 import pyautogui
 import time
 from wxauto import WeChat
-from config import config
+from src.config import config
 
 logger = logging.getLogger('main')
 
@@ -26,16 +26,16 @@ class EmojiHandler:
         
         # 支持的表情类型
         self.emotion_types = [
-    'happy', 'sad', 'angry', 'neutral', 'love', 'funny', 'cute', 'bored', 'shy', 
-    'embarrassed', 'sleepy', 'lonely', 'hungry', 'confort', 'surprise', 'confused', 
-    'playful', 'excited', 'tease', 'hot', 'speechless', 'scared', 'emo_1', 
-    'emo_2', 'emo_3', 'emo_4', 'emo_5', 'afraid', 'amused', 'anxious', 
-    'confident', 'cold', 'suspicious', 'loving', 'curious', 'envious', 
-    'jealous', 'miserable', 'stupid', 'sick', 'ashamed', 'withdrawn', 
-    'indifferent', 'sorry', 'determined', 'crazy', 'bashful', 'depressed', 
-    'enraged', 'frightened', 'interested', 'hopeful', 'regretful', 'stubborn', 
-    'thirsty', 'guilty', 'nervous', 'disgusted', 'proud', 'ecstatic', 
-    'frustrated', 'hurt', 'tired', 'smug', 'thoughtful', 'pained', 'optimistic', 
+    'happy', 'sad', 'angry', 'neutral', 'love', 'funny', 'cute', 'bored', 'shy',
+    'embarrassed', 'sleepy', 'lonely', 'hungry', 'comfort', 'surprise', 'confused',
+    'playful', 'excited', 'tease', 'hot', 'speechless', 'scared', 'emo_1',
+    'emo_2', 'emo_3', 'emo_4', 'emo_5', 'afraid', 'amused', 'anxious',
+    'confident', 'cold', 'suspicious', 'loving', 'curious', 'envious',
+    'jealous', 'miserable', 'stupid', 'sick', 'ashamed', 'withdrawn',
+    'indifferent', 'sorry', 'determined', 'crazy', 'bashful', 'depressed',
+    'enraged', 'frightened', 'interested', 'hopeful', 'regretful', 'stubborn',
+    'thirsty', 'guilty', 'nervous', 'disgusted', 'proud', 'ecstatic',
+    'frustrated', 'hurt', 'tired', 'smug', 'thoughtful', 'pained', 'optimistic',
     'relieved', 'puzzled', 'shocked', 'joyful', 'skeptical', 'bad', 'worried']
 
 

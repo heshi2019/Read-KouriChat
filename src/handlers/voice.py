@@ -12,15 +12,16 @@ import logging
 import requests
 from datetime import datetime
 from typing import Optional
+from fish_audio_sdk import Session, TTSRequest
 
 # 修改logger获取方式，确保与main模块一致
 logger = logging.getLogger('main')
 
 class VoiceHandler:
-    def __init__(self, root_dir, tts_api_url):
+    def __init__(self, root_dir, tts_api_key):
         self.root_dir = root_dir
-        self.tts_api_url = tts_api_url
         self.voice_dir = os.path.join(root_dir, "data", "voices")
+        self.tts_api_key = tts_api_key
         
         # 确保语音目录存在
         os.makedirs(self.voice_dir, exist_ok=True)
@@ -39,24 +40,21 @@ class VoiceHandler:
                 
             # 生成唯一的文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            voice_path = os.path.join(self.voice_dir, f"voice_{timestamp}.wav")
-
-            # 这个 tts_api_url 在配置文件中，默认调用本地5000端口，
+            voice_path = os.path.join(self.voice_dir, f"voice_{timestamp}.mp3")
+            
             # 调用TTS API
-            response = requests.get(f"{self.tts_api_url}?text={text}", stream=True)
-            if response.status_code == 200:
-                with open(voice_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                return voice_path
-            else:
-                logger.error(f"语音生成失败: {response.status_code}")
-                return None
+            with open(voice_path, "wb") as f:
+                for chunk in Session(self.tts_api_key).tts(TTSRequest(
+                    reference_id="7f92f8afb8ec43bf81429cc1c9199cb1",
+                    text=text
+                )):
+                    f.write(chunk)
                 
         except Exception as e:
             logger.error(f"语音生成失败: {str(e)}")
             return None
+        
+        return voice_path
 
     def cleanup_voice_dir(self):
         """清理语音目录中的旧文件"""

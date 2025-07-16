@@ -82,7 +82,7 @@ class AutoSendHandler:
             # 请你模拟系统设置的角色，根据之前的聊天内容在微信上找对方发消息想知道对方在做什么，并跟对方报备自己在做什么、什么心情，语气自然，与之前的不要重复
             # 这是对方第 x 次未回复你, 你可以选择模拟对方未回复后的小脾气
 
-            reply_content = f"{self.config.behavior.auto_message.content} 这是对方第{self.unanswered_count}次未回复你, 你可以选择模拟对方未回复后的小脾气"
+reply_content = f"{self.config.behavior.auto_message.content} 这是对方可能因为在忙碌或者有自己的事没有回复你，根据上下文联系，判断用户现在的状态，回复符合角色的话语。"
             logger.info(f"自动发送消息到 {user_id}: {reply_content}")
             try:
 

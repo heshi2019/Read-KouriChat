@@ -5,7 +5,7 @@ import threading
 import time
 import os
 import shutil
-from config import config, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, MODEL, MAX_TOKEN, TEMPERATURE, MAX_GROUPS
+from src.config import config, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, MODEL, MAX_TOKEN, TEMPERATURE, MAX_GROUPS
 from wxauto import WeChat
 import re
 from src.handlers.emoji import EmojiHandler
@@ -15,8 +15,9 @@ from src.handlers.voice import VoiceHandler
 from src.services.ai.llm_service import LLMService
 from src.services.ai.image_recognition_service import ImageRecognitionService
 from modules.memory.memory_service import MemoryService
-from utils.logger import LoggerConfig
-from utils.console import print_status
+from modules.memory.content_generator import ContentGenerator
+from src.utils.logger import LoggerConfig
+from src.utils.console import print_status
 from colorama import init, Style
 from src.AutoTasker.autoTasker import AutoTasker
 from src.handlers.autosend import AutoSendHandler
@@ -37,16 +38,24 @@ if not os.path.exists(config_path) and os.path.exists(config_template_path):
     shutil.copy2(config_template_path, config_path)
     logger.info(f"已从模板创建配置文件: {config_path}")
 
-# 配置日志
-# 清除所有现有日志处理器
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
-
-logger_config = LoggerConfig(root_dir)
-logger = logger_config.setup_logger('main')
-listen_list = config.user.listen_list
 # 初始化colorama
 init()
+
+# 全局变量
+logger = None
+listen_list = []
+
+def initialize_logging():
+    """初始化日志系统"""
+    global logger, listen_list
+
+    # 清除所有现有日志处理器
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+
+    logger_config = LoggerConfig(root_dir)
+    logger = logger_config.setup_logger('main')
+    listen_list = config.user.listen_list
 
 # 消息队列接受消息时间间隔
 wait = 1
@@ -132,72 +141,114 @@ class ChatBot:
         except Exception as e:
             logger.error(f"消息处理失败: {str(e)}")
 
-# 读取提示文件
-avatar_dir = os.path.join(root_dir, config.behavior.context.avatar_dir)
-prompt_path = os.path.join(avatar_dir, "avatar.md")
-with open(prompt_path, "r", encoding="utf-8") as file:
-    prompt_content = file.read()
+# 全局变量
+prompt_content = ""
+emoji_handler = None
+image_handler = None
+voice_handler = None
+memory_service = None
+content_generator = None
+message_handler = None
+image_recognition_service = None
+auto_sender = None
+chat_bot = None
+ROBOT_WX_NAME = ""
 
-# 创建全局实例  这里可以看到，python创建实例的方法和java不一样，他可以用调用函数的形式
-# 直接创建实例
-emoji_handler = EmojiHandler(root_dir)
-image_handler = ImageHandler(
-    root_dir=root_dir,
-    api_key=config.llm.api_key,
-    base_url=config.llm.base_url,
-    image_model=config.media.image_generation.model
-)
-voice_handler = VoiceHandler(
-    root_dir=root_dir,
-    tts_api_url=config.media.text_to_speech.tts_api_url
-)
-memory_service = MemoryService(
-    root_dir=root_dir,
-    api_key=DEEPSEEK_API_KEY,
-    base_url=DEEPSEEK_BASE_URL,
-    model=MODEL,
-    max_token=MAX_TOKEN,
-    temperature=TEMPERATURE,
-    max_groups=MAX_GROUPS
-)
-image_recognition_service = ImageRecognitionService(
-    api_key=config.media.image_recognition.api_key,
-    base_url=config.media.image_recognition.base_url,
-    temperature=config.media.image_recognition.temperature,
-    model=config.media.image_recognition.model
-)
+def initialize_services():
+    """初始化服务实例"""
+    global prompt_content, emoji_handler, image_handler, voice_handler, memory_service, content_generator
+    global message_handler, image_recognition_service, auto_sender, chat_bot, ROBOT_WX_NAME
 
-# 获取机器人名称
-wx = WeChat()
-ROBOT_WX_NAME = wx.A_MyIcon.Name  # 使用Name属性而非方法
-logger.info(f"获取到机器人名称: {ROBOT_WX_NAME}")
+    # 读取提示文件
+    avatar_dir = os.path.join(root_dir, config.behavior.context.avatar_dir)
+    prompt_path = os.path.join(avatar_dir, "avatar.md")
+    if os.path.exists(prompt_path):
+        with open(prompt_path, "r", encoding="utf-8") as file:
+            prompt_content = file.read()
 
-message_handler = MessageHandler(
-    root_dir=root_dir,
-    api_key=config.llm.api_key,
-    base_url=config.llm.base_url,
-    model=config.llm.model,
-    max_token=config.llm.max_tokens,
-    temperature=config.llm.temperature,
-    max_groups=config.behavior.context.max_groups,
-    robot_name=ROBOT_WX_NAME,  # 使用动态获取的机器人名称
-    prompt_content=prompt_content,
-    image_handler=image_handler,
-    emoji_handler=emoji_handler,
-    voice_handler=voice_handler,
-    memory_service=memory_service  # 使用新的记忆服务
-)
+        # 处理无法读取文件的情况
+    else:
+        raise FileNotFoundError(f"avatar.md 文件不存在: {prompt_path}")
+		
+	# 创建全局实例  这里可以看到，python创建实例的方法和java不一样，他可以用调用函数的形式
+    # 创建服务实例
+    emoji_handler = EmojiHandler(root_dir)
+    image_handler = ImageHandler(
+        root_dir=root_dir,
+        api_key=config.llm.api_key,
+        base_url=config.llm.base_url,
+        image_model=config.media.image_generation.model
+    )
+    voice_handler = VoiceHandler(
+        root_dir=root_dir,
+        tts_api_key=config.media.text_to_speech.tts_api_key
+    )
+    memory_service = MemoryService(
+        root_dir=root_dir,
+        api_key=DEEPSEEK_API_KEY,
+        base_url=DEEPSEEK_BASE_URL,
+        model=MODEL,
+        max_token=MAX_TOKEN,
+        temperature=TEMPERATURE,
+        max_groups=MAX_GROUPS
+    )
 
-# 创建主动消息处理器
-auto_sender = AutoSendHandler(message_handler, config, listen_list)
+    content_generator = ContentGenerator(
+        root_dir=root_dir,
+        api_key=DEEPSEEK_API_KEY,
+        base_url=DEEPSEEK_BASE_URL,
+        model=MODEL,
+        max_token=MAX_TOKEN,
+        temperature=TEMPERATURE
+    )
+    # 创建图像识别服务
+    image_recognition_service = ImageRecognitionService(
+        api_key=config.media.image_recognition.api_key,
+        base_url=config.media.image_recognition.base_url,
+        temperature=config.media.image_recognition.temperature,
+        model=config.media.image_recognition.model
+    )
 
-# 创建聊天机器人实例
-chat_bot = ChatBot(message_handler, image_recognition_service, auto_sender, emoji_handler)
+    # 获取机器人名称
+    try:
+        wx = WeChat()
+        ROBOT_WX_NAME = wx.A_MyIcon.Name  # 使用Name属性而非方法
+        logger.info(f"获取到机器人名称: {ROBOT_WX_NAME}")
+    except Exception as e:
+        logger.warning(f"获取机器人名称失败: {str(e)}")
+        ROBOT_WX_NAME = ""
 
-# 启动主动消息倒计时
-auto_sender.start_countdown()
+    # 创建消息处理器
+    message_handler = MessageHandler(
+        root_dir=root_dir,
+        api_key=config.llm.api_key,
+        base_url=config.llm.base_url,
+        model=config.llm.model,
+        max_token=config.llm.max_tokens,
+        temperature=config.llm.temperature,
+        max_groups=config.behavior.context.max_groups,
+        robot_name=ROBOT_WX_NAME,  # 使用动态获取的机器人名称
+        prompt_content=prompt_content,
+        image_handler=image_handler,
+        emoji_handler=emoji_handler,
+        voice_handler=voice_handler,
+        memory_service=memory_service,  # 使用新的记忆服务
+        content_generator=content_generator  # 直接传递内容生成器实例
+    )
+
+    # 创建主动消息处理器
+    auto_sender = AutoSendHandler(message_handler, config, listen_list)
+
+    # 创建聊天机器人实例
+    chat_bot = ChatBot(message_handler, image_recognition_service, auto_sender, emoji_handler)
+
+    # 启动主动消息倒计时
+    auto_sender.start_countdown()
 
 def message_listener():
+    # 使用全局变量
+    global chat_bot, ROBOT_WX_NAME, logger, wait
+
     wx = None
     last_window_check = 0
     # 十分钟，600秒
@@ -253,11 +304,17 @@ def message_listener():
                             continue
                             # 接收窗口名跟发送人一样，代表是私聊，否则是群聊
                         if who == msg.sender:
-
-                            chat_bot.handle_wxauto_message(msg, msg.sender) # 处理私聊信息
+                            # 确保chat_bot已经初始化
+                            if chat_bot:
+                                chat_bot.handle_wxauto_message(msg, msg.sender) # 处理私聊信息
+                            else:
+                                logger.warning("聊天机器人实例尚未初始化")
                         elif ROBOT_WX_NAME != '' and (bool(re.search(f'@{ROBOT_WX_NAME}\u2005', msg.content)) or bool(re.search(f'{ROBOT_WX_NAME}\u2005', msg.content))):
                             # 修改：在群聊被@时或者被叫名字，传入群聊ID(who)作为回复目标
-                            chat_bot.handle_wxauto_message(msg, who, is_group=True)
+                            if chat_bot:
+                                chat_bot.handle_wxauto_message(msg, who, is_group=True)
+                            else:
+                                logger.warning("聊天机器人实例尚未初始化")
                         else:
                             logger.debug(f"非需要处理消息，可能是群聊非@消息: {content}")
                     except Exception as e:
@@ -273,6 +330,9 @@ def initialize_wx_listener():
     """
     初始化微信监听，包含重试机制
     """
+    # 使用全局变量
+    global listen_list, logger
+
     max_retries = 3
     retry_delay = 2  # 秒
 
@@ -294,8 +354,8 @@ def initialize_wx_listener():
                         logger.error(f"找不到会话: {chat_name}")
                         continue
 
-                    # 尝试添加监听，设置savepic=False
-                    wx.AddListenChat(who=chat_name, savepic=True)
+                    # 尝试添加监听，设置savepic=True, savevoice=True
+                    wx.AddListenChat(who=chat_name, savepic=True, savevoice=True)
                     logger.info(f"成功添加监听: {chat_name}")
                     time.sleep(0.5)  # 添加短暂延迟，避免操作过快
                 except Exception as e:
@@ -318,6 +378,9 @@ def initialize_auto_tasks(message_handler):
     print_status("初始化自动任务系统...", "info", "CLOCK")
 
     try:
+        # 导入config变量
+        from src.config import config
+
         # 创建AutoTasker实例
         auto_tasker = AutoTasker(message_handler)
         print_status("创建AutoTasker实例成功", "success", "CHECK")
@@ -366,18 +429,35 @@ def initialize_auto_tasks(message_handler):
         return None
 
 def switch_avatar(new_avatar_name):
+    # 使用全局变量
+    global emoji_handler, message_handler, root_dir
+
+    # 导入config变量
+    from src.config import config
+
     # 更新配置
     config.behavior.context.avatar_dir = f"avatars/{new_avatar_name}"
 
     # 重新初始化 emoji_handler
-    global emoji_handler
     emoji_handler = EmojiHandler(root_dir)
 
     # 更新 message_handler 中的 emoji_handler
-    message_handler.emoji_handler = emoji_handler
+    if message_handler:
+        message_handler.emoji_handler = emoji_handler
+    else:
+        logger.warning("消息处理器实例尚未初始化")
 
 def main():
+    # 初始化变量
+    listener_thread = None
+
     try:
+        # 初始化日志系统
+        initialize_logging()
+
+        # 初始化服务实例
+        initialize_services()
+
         # 设置wxauto日志路径
         automation_log_dir = os.path.join(root_dir, "logs", "automation")
         if not os.path.exists(automation_log_dir):

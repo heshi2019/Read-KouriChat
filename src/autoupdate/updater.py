@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 class Updater:
 
     # 云端公告、版本信息、模型列表和更新包 URLs
-    CLOUD_ANNOUNCEMENT_URL = "https://static.kourichat.com/kourichat/cloud/announcement.json"
-    CLOUD_VERSION_URL = "https://static.kourichat.com/kourichat/cloud/version.json"
-    CLOUD_MODELS_URL = "https://static.kourichat.com/kourichat/cloud/models.json"
-    CLOUD_RELEASE_URL = "https://static.kourichat.com/kourichat/releases/releases.zip"
+    CLOUD_ANNOUNCEMENT_URL = "https://git.kourichat.com/KouriChat-Main/cloud-delivery-repo/raw/branch/main/config/announcement.json"
+    CLOUD_VERSION_URL = "https://git.kourichat.com/KouriChat-Main/cloud-delivery-repo/raw/branch/main/config/version.json"
+    CLOUD_MODELS_URL = "https://git.kourichat.com/KouriChat-Main/cloud-delivery-repo/raw/branch/main/config/models.json"
+    CLOUD_RELEASE_URL = "https://git.kourichat.com/KouriChat-Main/cloud-delivery-repo/raw/branch/main/releases/releases.zip"
 
     # 默认需要跳过的文件和文件夹（不会被更新）
     DEFAULT_IGNORE_PATTERNS = [
@@ -392,21 +392,6 @@ class Updater:
 
         return False
 
-    def calculate_file_hash(self, file_path: str) -> str:
-        """计算文件的MD5哈希值"""
-        if not os.path.exists(file_path):
-            return ""
-
-        hash_md5 = hashlib.md5()
-        try:
-            with open(file_path, "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
-                    hash_md5.update(chunk)
-            return hash_md5.hexdigest()
-        except Exception as e:
-            logger.error(f"计算文件哈希值失败: {file_path} - {str(e)}")
-            return ""
-
     def backup_current_version(self) -> bool:
         """备份当前版本"""
         try:
@@ -486,15 +471,9 @@ class Updater:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
 
-            # 找到解压后的实际项目根目录（通常是一个子目录）
-            extracted_root = None
-            for item in os.listdir(extract_dir):
-                item_path = os.path.join(extract_dir, item)
-                if os.path.isdir(item_path):
-                    extracted_root = item_path
-                    break
-
-            if not extracted_root:
+            # 直接使用kourichat作为解压后的目录名
+            extracted_root = os.path.join(extract_dir, 'kourichat')
+            if not os.path.exists(extracted_root):
                 raise Exception("无法找到解压后的项目目录")
 
             # 记录更新的文件
@@ -530,22 +509,12 @@ class Updater:
                     src_file = os.path.join(root, file)
                     dst_file = os.path.join(self.root_dir, file_rel_path)
 
-                    # 检查文件是否有变化
-                    need_update = True
-                    if os.path.exists(dst_file):
-                        src_hash = self.calculate_file_hash(src_file)
-                        dst_hash = self.calculate_file_hash(dst_file)
-                        if src_hash and dst_hash and src_hash == dst_hash:
-                            need_update = False
-
-                    # 如果文件有变化或不存在，则更新
-                    if need_update:
-                        pass
-                        # os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                        # 将新文件赋值到旧文件，并覆盖
-                        # 禁止文件覆盖（强制取消更新）
-                        # shutil.copy2(src_file, dst_file)
-                        # updated_files.append(file_rel_path)
+                    # 直接复制文件，不进行哈希值比较
+                    os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                    # 将新文件赋值到旧文件，并覆盖
+                    # 禁止文件覆盖（强制取消更新）
+                    # shutil.copy2(src_file, dst_file)
+                    updated_files.append(file_rel_path)
 
             # 记录更新的文件列表
             if updated_files:
@@ -568,32 +537,18 @@ class Updater:
                 shutil.rmtree(self.temp_dir)
                 logger.info(f"已清理临时更新目录: {self.temp_dir}")
 
-            # 清理备份目录 - 添加更多重试和强制删除逻辑
+            # 清理备份目录
             backup_dir = os.path.join(self.root_dir, 'backup')
             self._force_remove_directory(backup_dir, "备份目录")
 
-            # 清理解压后的仓库文件夹（处理多种可能的命名格式）
+            # 清理可能的解压目录 (kourichat 和 KouriChat)
             possible_repo_dirs = [
-                os.path.join(self.root_dir, "KouriChat-Kourichat-Exploration"),
-                os.path.join(self.root_dir, "Kourichat-Exploration"),
-                os.path.join(self.root_dir, "Kourichat-Exploration-main"),
-                os.path.join(self.root_dir, "KouriChat-Kourichat-Festival-Test"),
-                os.path.join(self.root_dir, "Kourichat-Festival-Test")
+                os.path.join(self.root_dir, "kourichat"),
+                os.path.join(self.root_dir, "KouriChat"),
             ]
 
             for repo_dir in possible_repo_dirs:
                 self._force_remove_directory(repo_dir, "解压目录")
-
-            # 清理其他可能的格式的解压文件夹
-            for item in os.listdir(self.root_dir):
-                item_path = os.path.join(self.root_dir, item)
-                if os.path.isdir(item_path):
-                    # 检查是否是解压后的仓库文件夹
-                    if (item.startswith("KouriChat-") or
-                        item.startswith("Kourichat-") or
-                        "Kourichat-Festival-Test" in item):  # 添加实际的文件夹名称匹配
-                        if item_path != self.root_dir:  # 确保不会删除项目根目录
-                            self._force_remove_directory(item_path, f"额外的解压目录: {item}")
 
         except Exception as e:
             logger.error(f"清理临时文件失败: {str(e)}")
@@ -791,15 +746,25 @@ class Updater:
 def check_cloud_info():
     """检查云端公告、版本信息和模型列表"""
     logger.info("开始检查云端信息...")
-    updater = Updater()
-    announcement = updater.fetch_cloud_announcement()
-    version = updater.fetch_cloud_version()
-    models = updater.fetch_cloud_models()
-    return {
-        'announcement': announcement,
-        'version': version,
-        'models': models
-    }
+    try:
+        updater = Updater()
+        announcement = updater.fetch_cloud_announcement()
+        version = updater.fetch_cloud_version()
+        models = updater.fetch_cloud_models()
+
+        # 检查是否所有请求都失败了
+        if announcement is None and version is None and models is None:
+            logger.error("所有云端信息获取失败，可能是网络问题")
+            return None
+
+        return {
+            'announcement': announcement,
+            'version': version,
+            'models': models
+        }
+    except Exception as e:
+        logger.error(f"检查云端信息时发生错误: {str(e)}")
+        return None
 
 def check_and_update():
     """检查并执行更新"""

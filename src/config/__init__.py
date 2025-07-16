@@ -41,7 +41,7 @@ class ImageGenerationSettings:
 
 @dataclass
 class TextToSpeechSettings:
-    tts_api_url: str
+    tts_api_key: str
     voice_dir: str
 
 @dataclass
@@ -96,6 +96,13 @@ class AuthSettings:
     admin_password: str
 
 @dataclass
+class NetworkSearchSettings:
+    search_enabled: bool
+    weblens_enabled: bool
+    api_key: str
+    base_url: str
+
+@dataclass
 class Config:
     def __init__(self):
 
@@ -105,6 +112,7 @@ class Config:
         self.media: MediaSettings
         self.behavior: BehaviorSettings
         self.auth: AuthSettings
+        self.network_search: NetworkSearchSettings
         self.version: str = "1.0.0"  # 配置文件版本
         self.load_config()
 
@@ -387,7 +395,7 @@ class Config:
                         temp_dir=image_generation_data['temp_dir'].get('value', '')
                     ),
                     text_to_speech=TextToSpeechSettings(
-                        tts_api_url=text_to_speech_data['tts_api_url'].get('value', ''),
+                        tts_api_key=text_to_speech_data['tts_api_key'].get('value', ''),
                         voice_dir=text_to_speech_data['voice_dir'].get('value', '')
                     )
                 )
@@ -455,6 +463,15 @@ class Config:
                     admin_password=auth_data.get('admin_password', {}).get('value', '')
                 )
 
+                # 网络搜索设置
+                network_search_data = categories.get('network_search_settings', {}).get('settings', {})
+                self.network_search = NetworkSearchSettings(
+                    search_enabled=network_search_data.get('search_enabled', {}).get('value', False),
+                    weblens_enabled=network_search_data.get('weblens_enabled', {}).get('value', False),
+                    api_key=network_search_data.get('api_key', {}).get('value', ''),
+                    base_url=network_search_data.get('base_url', {}).get('value', 'https://api.kourichat.com/v1')
+                )
+
                 logger.info("配置加载完成")
 
         except Exception as e:
@@ -496,10 +513,18 @@ VISION_TEMPERATURE = config.media.image_recognition.temperature
 IMAGE_MODEL = config.media.image_generation.model
 TEMP_IMAGE_DIR = config.media.image_generation.temp_dir
 MAX_GROUPS = config.behavior.context.max_groups
-TTS_API_URL = config.media.text_to_speech.tts_api_url
+#TTS_API_URL = config.media.text_to_speech.tts_api_key
 VOICE_DIR = config.media.text_to_speech.voice_dir
 AUTO_MESSAGE = config.behavior.auto_message.content
 MIN_COUNTDOWN_HOURS = config.behavior.auto_message.min_hours
 MAX_COUNTDOWN_HOURS = config.behavior.auto_message.max_hours
 QUIET_TIME_START = config.behavior.quiet_time.start
 QUIET_TIME_END = config.behavior.quiet_time.end
+
+# 网络搜索设置
+NETWORK_SEARCH_ENABLED = config.network_search.search_enabled
+NETWORK_SEARCH_MODEL = 'kourichat-search'  # 固定使用KouriChat模型
+WEBLENS_ENABLED = config.network_search.weblens_enabled
+WEBLENS_MODEL = 'kourichat-weblens'  # 固定使用KouriChat模型
+NETWORK_SEARCH_API_KEY = config.network_search.api_key
+NETWORK_SEARCH_BASE_URL = config.network_search.base_url

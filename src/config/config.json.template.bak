@@ -92,10 +92,10 @@
                     }
                 },
                 "text_to_speech": {
-                    "tts_api_url": {
-                        "value": "http://127.0.0.1:5000/tts",
+                    "tts_api_key": {
+                        "value": "",
                         "type": "string",
-                        "description": "TTS服务API地址"
+                        "description": "TTS服务API"
                     },
                     "voice_dir": {
                         "value": "data/voices",

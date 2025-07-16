@@ -1,5 +1,6 @@
 colorama
 Flask
+fish-audio-sdk
 openai
 pandas
 psutil
@@ -16,3 +17,4 @@ dateparser==1.2.0
 pytz==2024.1
 python-dotenv==1.0.1
 schedule
+emoji==2.10.1

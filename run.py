@@ -48,9 +48,13 @@ sys.dont_write_bytecode = True
 # 本文件是所有其他python文件的入口,所以其他文件也会继承这个python解释器,
 # 如果其他文件可以单独启动,那就是不同的解释器了
 
+# 将项目根目录添加到Python路径
+root_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(root_dir)
+
 
 # 将src目录添加到Python路径
-src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
+src_path = os.path.join(root_dir, 'src')
 sys.path.append(src_path)
 
 def initialize_system():
@@ -110,7 +114,7 @@ def initialize_system():
             )
             voice_handler = VoiceHandler(
                 root_dir=root_dir,
-                tts_api_url=config.media.text_to_speech.tts_api_url
+                tts_api_key=config.media.text_to_speech.tts_api_key
             )
 
             # 下面是清理了一些文件夹，包括日志，临时文件，图片缓存，语音缓存
