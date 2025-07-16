@@ -7,6 +7,7 @@
 - 启动Web服务器
 - 动态修改配置
 """
+# os这个库是python内置的库,主要用于和系统的交互,如系统目录操作,文件操作,环境变量操作等
 import os
 import sys
 import re
@@ -123,14 +124,22 @@ def check_cloud_updates_on_startup():
     try:
         from src.autoupdate.updater import check_cloud_info
         logger.info("应用启动时检查云端更新...")
+        # 获取服务器的数据，写到本地
         check_cloud_info()
+
         logger.info("云端更新检查完成")
     except Exception as e:
         logger.error(f"检查云端更新失败: {e}")
 
 # 启动一个后台线程来检查云端更新
+
+# update_thread  线程名，target 要执行的函数
 update_thread = threading.Thread(target=check_cloud_updates_on_startup)
+# 设置为守护线程，主程序退出，本线程退出
+# 这个线程只会执行一次，设置为守护线程的含义是，那怕这个公告更新会持续很久，对主程序也无所谓
+# 就相当于后台静默更新，不影响主程序
 update_thread.daemon = True
+# 线程启动
 update_thread.start()
 
 # 添加全局标记，跟踪公告是否已在本应用实例中显示过
@@ -140,15 +149,20 @@ def get_available_avatars() -> List[str]:
     """获取可用的人设目录列表"""
     avatar_base_dir = os.path.join(ROOT_DIR, "data/avatars")
     if not os.path.exists(avatar_base_dir):
+        # os.makedirs创建多层目录  exist_ok=True 如果目录存在,不抛出异常
         os.makedirs(avatar_base_dir, exist_ok=True)
         logger.info(f"创建人设目录: {avatar_base_dir}")
         return []
 
     # 获取所有包含 avatar.md 和 emojis 目录的有效人设目录
     avatars = []
+
+    # item这个其实就是角色的名字
     for item in os.listdir(avatar_base_dir):
         avatar_dir = os.path.join(avatar_base_dir, item)
         if os.path.isdir(avatar_dir):
+
+            # 获取人设文件路径
             avatar_md_path = os.path.join(avatar_dir, "avatar.md")
             emojis_dir = os.path.join(avatar_dir, "emojis")
 
@@ -159,6 +173,8 @@ def get_available_avatars() -> List[str]:
 
             if not os.path.exists(avatar_md_path):
                 with open(avatar_md_path, 'w', encoding='utf-8') as f:
+
+                    # 这里给了人设的默认模板，文件名字  avatar.md
                     f.write("# 任务\n请在此处描述角色的任务和目标\n\n# 角色\n请在此处描述角色的基本信息\n\n# 外表\n请在此处描述角色的外表特征\n\n# 经历\n请在此处描述角色的经历和背景故事\n\n# 性格\n请在此处描述角色的性格特点\n\n# 经典台词\n请在此处列出角色的经典台词\n\n# 喜好\n请在此处描述角色的喜好\n\n# 备注\n其他需要补充的信息")
                 logger.info(f"为人设 {item} 创建模板avatar.md文件")
 
@@ -186,6 +202,7 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
     """解析配置文件，将配置项按组分类"""
     from src.config import config
 
+    # 读config的数据
     try:
         # 基础配置组
         config_groups = {
@@ -327,6 +344,7 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
 
         # 直接从配置文件读取定时任务数据
         tasks = []
+        # 这一长串，就是把 config中的定时任务配置 中的value读出来
         try:
             config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -355,9 +373,12 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
         return {}
 
 
-
+# @app.route('/') Flask路由装饰器，表示这个函数处理根路径（即网站首页）
+# 的访问请求
 @app.route('/')
 def index():
+    # redirect重定向到指定url
+    # 生成对应的路由 url_for('dashboard')
     """重定向到控制台"""
     return redirect(url_for('dashboard'))
 
@@ -472,6 +493,11 @@ def save_config():
             }), 500
 
         # 立即重新加载配置
+        # 在Flask框架中，g 是一个特殊对象，全称是 "application context global"
+        # 相当于一个全局变量，用于存储当前请求的上下文信息。并且自带多用户登录，
+        # 可以同时登录多个用户，每个用户的g对象是独立的，互不干扰
+        # 但后端的配置文件好像没有做多用户处理，不知道怎么做的，我也没用到
+
         g.config_data = current_config
 
         # 重新初始化定时任务
@@ -491,6 +517,8 @@ def save_config():
             "title": "错误"
         }), 500
 
+
+# 这个函数是将前端的参数，更新到后端，写的太繁琐了，并且我自己试过，不好用
 def update_config_value(config_data, key, value):
     """更新配置值到正确的位置"""
     try:
@@ -523,6 +551,7 @@ def update_config_value(config_data, key, value):
             'MAX_GROUPS': ['categories', 'behavior_settings', 'settings', 'context', 'max_groups', 'value'],
             'AVATAR_DIR': ['categories', 'behavior_settings', 'settings', 'context', 'avatar_dir', 'value'],
         }
+
 
         if key in mapping:
             path = mapping[key]

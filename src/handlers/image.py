@@ -16,6 +16,8 @@ import re
 import time
 from src.services.ai.llm_service import LLMService
 
+# 获取日志记录器，如果这个名字存在，则获取，不存在则创建
+
 # 修改logger获取方式，确保与main模块一致
 logger = logging.getLogger('main')
 
@@ -38,6 +40,7 @@ class ImageHandler:
             max_groups=15
         )
 
+        # 这里字典的值是一个字符串，使用了括号括起来了，括号的作用就是连接多个字符串
         # 多语言提示模板
         self.prompt_templates = {
             'basic': (
@@ -57,6 +60,8 @@ class ImageHandler:
                 "直接返回结果"
             )
         }
+
+        # 质量分级？负面提示词？这是什么模型的调用要求吗
 
         # 质量分级参数配置
         self.quality_profiles = {
@@ -94,7 +99,11 @@ class ImageHandler:
         # 提示词扩展触发条件
         self.prompt_extend_threshold = 30  # 字符数阈值
 
+        # 这里会创建一连串目录，用于存图片，这个目录后续会通过其他函数删除
         os.makedirs(self.temp_dir, exist_ok=True)
+
+     # 下面这个函数的定义后加了箭头，箭头后表示的是本函数的返回值类型，同样，
+     # 这个返回值类型也是建议，不强制要求，就算返回str也不会报错
 
     def is_random_image_request(self, message: str) -> bool:
         """检查消息是否为请求图片的模式"""
@@ -109,6 +118,13 @@ class ImageHandler:
         # 将消息转换为小写以进行不区分大小写的匹配
         message = message.lower()
 
+        # 这是一个检查消息里面是否有basic_patterns 这个列表中的元素
+        # 下面的这种写法称为高效模式匹配写法 等价于
+        # for pattern in basic_patterns
+        #     if pattern in message:
+        #         return True
+        # any(...) → 只要有一个模式匹配成功就返回 True
+
         # 1. 检查基础模式
         if any(pattern in message for pattern in basic_patterns):
             return True
@@ -120,20 +136,33 @@ class ImageHandler:
             r'看[张个幅]图',
         ]
 
+        # 这里主要用到了re.search 函数，这个函数的作用是在字符串中搜索正则表达式模式
+        # 而正则表达式在上面  complex_patterns 列表中，每个元素中用方括号括起来了
+        # 列表的元素中的 [] 就是正则表达式，表示匹配其中任意字符
         if any(re.search(pattern, message) for pattern in complex_patterns):
             return True
 
         return False
 
+    # Optional和Union，这两个关键字都是表示参数可以是多种类型的，
+    # 区别在于Optional表示参数可以是None，而Union表示参数可以是多种类型中的一种
+    # 这里的Optional[str]表示返回值可以是str类型，也可以是None类型
+    # 这里的Optional[str]等价于str | None
+
+    # 也就是说，这个方法通过随机api获取了一张图片并进行了保存,方法返回了图片路径，为什么要这样做
     def get_random_image(self) -> Optional[str]:
         """从API获取随机图片并保存"""
         try:
             if not os.path.exists(self.temp_dir):
                 os.makedirs(self.temp_dir)
 
+            # https://t.mwm.moe   这是一个获取随机图片的网站，主要为二次元图片
+
             # 获取图片链接
             response = requests.get('https://t.mwm.moe/pc')
             if response.status_code == 200:
+
+                # time.time() 获取当前时间戳，这个time库是官方内置的库
                 # 生成唯一文件名
                 timestamp = int(time.time())
                 image_path = os.path.join(self.temp_dir, f'image_{timestamp}.jpg')
@@ -149,6 +178,10 @@ class ImageHandler:
 
     def is_image_generation_request(self, text: str) -> bool:
         """判断是否为图像生成请求"""
+
+        # 用不同的列表,存储动词,名词,然后和用户输入的文本进行匹配,如果匹配到了
+        # 表示用户需要生成图片,这怎么感觉怪怪的
+
         # 基础动词
         draw_verbs = ["画", "绘", "生成", "创建", "做"]
 
@@ -209,10 +242,13 @@ class ImageHandler:
             if len(prompt) >= 30:  # 长度足够则不扩展
                 return prompt
 
+            # 这里调用了大模型,用来扩展提示词,也就是 prompt_templates 字典的 basic 键的值
             response = self.text_ai.chat(
                 messages=[{"role": "user", "content": self.prompt_templates['basic'].format(prompt=prompt)}],
                 temperature=0.7
             )
+
+            # 移除返回数据开头结尾的空白符,或者返回原本提示词
             return response.strip() or prompt
         except Exception as e:
             logger.error(f"提示词扩展失败: {str(e)}")
@@ -230,6 +266,7 @@ class ImageHandler:
             "写实": "photorealistic",
         }
         for cn, en in translations.items():
+            # replace替换,将prompt这个变量(句子)中,所有在translations字典中的中文替换为英文
             prompt = prompt.replace(cn, en)
         return prompt
 
@@ -239,6 +276,7 @@ class ImageHandler:
             # 获取现有通用负面词前10个作为示例
             existing_samples = ', '.join(self.base_negative_prompts[:10])
 
+            # 这就是构建了一个请求API,有具体的请求内容,但这负面词是什么
             response = self.text_ai.chat([{
                 "role": "user",
                 "content": self.negative_prompt_template.format(
@@ -249,6 +287,8 @@ class ImageHandler:
 
             # 解析响应并去重
             generated = [n.strip().lower() for n in response.split(',')]
+
+            # 转为集合去重，再转为列表返回
             return list(set(generated))
         except Exception as e:
             logger.error(f"动态负面词生成失败: {str(e)}")
@@ -256,16 +296,22 @@ class ImageHandler:
 
     def _build_final_negatives(self, prompt: str) -> str:
         """构建最终负面提示词"""
+
+        # 这里将原本的负面词列表转为了集合
         # 始终包含基础负面词
         final_negatives = set(self.base_negative_prompts)
 
+        # 提示词小于30个字符时触发
         # 当提示词简短时触发动态生成
         if len(prompt) <= self.prompt_extend_threshold:
             dynamic_negatives = self._generate_dynamic_negatives(prompt)
+
+            # 将提示词给AI做扩展，将扩展后的词加入到本函数的集合中
             final_negatives.update(dynamic_negatives)
 
         return ', '.join(final_negatives)
 
+    # Tuple表示元组，元组为不可变的有序序列
     def _optimize_prompt(self, prompt: str) -> Tuple[str, str]:
         """多阶段提示词优化"""
         try:
@@ -283,6 +329,8 @@ class ImageHandler:
 
             # 混合策略：取两次优化的关键要素
             final_prompt = f"{stage1}, {stage2.split(',')[-1]}"
+
+            # 返回数据类型为元组
             return final_prompt, "multi-step"
 
         except Exception as e:
@@ -291,6 +339,8 @@ class ImageHandler:
 
     def _select_quality_profile(self, prompt: str) -> dict:
         """根据提示词复杂度选择质量配置"""
+
+        # 根据输入参数的长度，返回 quality_profiles 字典不同的数字
         word_count = len(prompt.split())
         if word_count > 30:
             return self.quality_profiles['premium']
@@ -303,7 +353,12 @@ class ImageHandler:
         try:
             # 自动扩展短提示词
             if len(prompt) <= self.prompt_extend_threshold:
+
+                # 如果提示词少于30个，让AI描述图片
                 prompt = self._expand_prompt(prompt)
+
+            # 有点重复，上面的 _expand_prompt方法就已经让AI描述图片了，下面的 _optimize_prompt
+            # 函数有让AI描述了一次
 
             # 多阶段提示词优化
             optimized_prompt, strategy = self._optimize_prompt(prompt)
@@ -334,6 +389,9 @@ class ImageHandler:
                 "seed": int(time.time() % 1000)  # 添加随机种子
             }
 
+            # 这里构建的所有请求参数，都是从run.py文件中传递，
+            # 再追数据配置在src.config下，也就是从浏览器看到的配置页
+
             # 调用生成API
             response = requests.post(
                 f"{self.base_url}/images/generations",
@@ -349,6 +407,8 @@ class ImageHandler:
                 img_url = result["data"][0]["url"]
                 img_response = requests.get(img_url)
                 if img_response.status_code == 200:
+
+                    # 获取当前时间做文件名
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     temp_path = os.path.join(self.temp_dir, f"image_{timestamp}.jpg")
                     with open(temp_path, "wb") as f:

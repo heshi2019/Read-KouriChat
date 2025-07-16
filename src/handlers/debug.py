@@ -58,6 +58,9 @@ class DebugCommandHandler:
         Returns:
             bool: 是否为调试命令
         """
+        # message.strip()去掉字符串前后的空格和换行符
+        # startswith判断字符串是否以指定前缀开头，返回布尔值
+        # self.DEBUG_PREFIX 定义的字符串为 "/"
         return message.strip().startswith(self.DEBUG_PREFIX)
     
     def process_command(self, command: str, current_avatar: str, user_id: str) -> Tuple[bool, str]:
@@ -74,11 +77,15 @@ class DebugCommandHandler:
         """
         # 去除前缀并转为小写
         cmd = command.strip()[1:].lower()
-        
+
+        # 这个调试其实就是  _get_help_message  函数中所写的功能，而下函数就是实现这些功能
+
         # 帮助命令
         if cmd == "help":
             return True, self._get_help_message()
-            
+
+        # 角色的记忆其实是存在项目名 data\avatars\角色名\memory\用户名 这个路径下
+        # 有三种不同的记忆，短期 short_memory， 核心 core_memory ， 对话暂存数据  xxx
         # 显示当前角色记忆
         elif cmd == "mem":
             return True, self._show_memory(current_avatar, user_id)
@@ -93,6 +100,7 @@ class DebugCommandHandler:
             
         # 清空当前角色的对话上下文
         elif cmd == "context":
+            # 清空上下文，是将调用模型的上下文参数置空，可能是调用规则
             return True, self._clear_context(user_id)
         
         # 生成日记
@@ -157,6 +165,9 @@ class DebugCommandHandler:
             result += "【核心记忆】\n"
             if core_memory:
                 try:
+
+                    # isinstance函数，用于判断参数类型是否为指定类型
+                    # java中也有类似的函数 if (obj instanceof String)
                     if isinstance(core_memory, str):
                         result += f"{core_memory}\n"
                     else:
@@ -170,6 +181,15 @@ class DebugCommandHandler:
             # 显示最近对话
             result += "\n【最近对话】\n"
             if recent_dialogues:
+
+                # reversed(recent_dialogues)  # 将对话记录列表倒序，使最近的对话最先显示
+                #
+                # enumerate(..., 1)  # 生成带序号的元组，序号从1开始计数
+                #
+                # 原始顺序：[对话1, 对话2, 对话3, 对话4, 对话5]
+                # reversed后：[对话5, 对话4, 对话3, 对话2, 对话1]
+                # enumerate(..., 1)生成：(1, 对话5), (2, 对话4)...
+
                 for i, dialogue in enumerate(reversed(recent_dialogues), 1):
                     try:
                         # 获取用户消息，去掉时间戳
@@ -308,7 +328,8 @@ class DebugCommandHandler:
             return "错误: 日记服务未初始化"
             
         try:
-            # 生成日记
+            # 生成日记，根据短期记忆，最近十五轮对话，角色设定，日记模板（在项目中没找到）
+            # 生成一篇日记
             diary_content = self.diary_service.generate_diary(avatar_name, user_id)
             
             if not diary_content or diary_content.startswith("无法"):

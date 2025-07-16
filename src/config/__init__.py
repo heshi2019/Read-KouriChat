@@ -10,6 +10,11 @@ from typing import List, Optional, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
+
+# @dataclass这个注解，大概相当于java的@data，生成一些类的方法，
+# 在这里主要是生成init方法，相当于java 的构造方法，会对传入类的变量做初始化
+
+
 @dataclass
 class UserSettings:
     listen_list: List[str]
@@ -93,6 +98,8 @@ class AuthSettings:
 @dataclass
 class Config:
     def __init__(self):
+
+        # 这里的冒号是声明了这个类变量的类型，就像java中的 public String userName
         self.user: UserSettings
         self.llm: LLMSettings
         self.media: MediaSettings
@@ -176,6 +183,7 @@ class Config:
                 return False
         return False
 
+    # Dict 和 Any都是 typing 模块的，功能是提供类似java中的泛型，Dict表示字典，Any表示任意类型
     def compare_configs(self, old_config: Dict[str, Any], new_config: Dict[str, Any], path: str = "") -> Dict[str, Any]:
         # 比较两个配置字典的差异
         diff = {"added": {}, "removed": {}, "modified": {}}
@@ -263,6 +271,7 @@ class Config:
             else:
                 target[key] = value
 
+    # 这个函数就是比较乱目前的配置文件和模板文件的差异，怎么更新呢
     def _check_and_update_config(self) -> None:    
         # 检查并更新配置文件
         try:
@@ -290,10 +299,11 @@ class Config:
                 except Exception as e:
                     logger.warning(f"读取备份模板失败: {str(e)}")
             
-            # 比较配置差异
+            # 比较配置差异，大概是怎么比的，我懒得看了，好烦
             diff = self.compare_configs(current_config, template_config)
             
-            # 如果有差异，更新配置
+            # 如果有差异，更新配置，这个any函数，对于diff这个字典的作用，是判断是否有键值不为空，
+            # 如有，则返回真
             if any(diff.values()):
                 logger.info("检测到配置需要更新")
                 
@@ -324,6 +334,7 @@ class Config:
             if not os.path.exists(self.config_path):
                 if os.path.exists(self.config_template_path):
                     logger.info("配置文件不存在，从模板创建")
+                    # shutil.copy2文件复制函数，两个参数含义  源文件，目标文件
                     shutil.copy2(self.config_template_path, self.config_path)
                     # 顺便备份模板
                     self._backup_template()
@@ -333,7 +344,7 @@ class Config:
             # 检查配置是否需要更新
             self._check_and_update_config()
 
-            # 读取配置文件
+            # 读取配置文件，将配置文件中数据，加载到程序中
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
                 categories = config_data['categories']

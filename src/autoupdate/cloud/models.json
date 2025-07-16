@@ -3,7 +3,7 @@
     "update_url": "https://static.kourichat.com/models/latest.json",
     "api_providers": [
         {
-            "id": "kourichat-asia",
+            "id": "kourichat-global",
             "name": "KouriChat API (推荐)",
             "url": "https://api.kourichat.com/v1",
             "register_url": "https://api.kourichat.com/register",
@@ -36,7 +36,7 @@
         }
     ],
     "models": {
-        "kourichat-asia": [
+        "kourichat-global": [
             {
                 "id": "kourichat-v3",
                 "name": "KouriChat V3",

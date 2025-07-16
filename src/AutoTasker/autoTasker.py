@@ -19,6 +19,8 @@ class AutoTasker:
         """
         self.message_handler = message_handler
         self.task_file_path = task_file_path
+
+        # BackgroundScheduler，自动化任务核心组件，是 APScheduler 库中提供的后台调度器实现
         self.scheduler = BackgroundScheduler()
         self.tasks = {}
         
@@ -40,6 +42,7 @@ class AutoTasker:
                     tasks_list = json.load(f)
                     
                 # 确保tasks_list是列表
+                # isinstance 参数类型检查
                 if not isinstance(tasks_list, list):
                     tasks_list = []
                 
@@ -108,12 +111,15 @@ class AutoTasker:
                 trigger = CronTrigger.from_crontab(schedule_time)
             elif schedule_type == 'interval':
                 # 确保interval是有效的整数
+                # isdigit()用于判断字符串是否只包含十进制数字字符
                 if not schedule_time or not str(schedule_time).isdigit():
                     raise ValueError(f"无效的时间间隔: {schedule_time}")
                 trigger = IntervalTrigger(seconds=int(schedule_time))
             else:
                 raise ValueError(f"不支持的调度类型: {schedule_type}")
 
+            # 这里在函数内部再次创建了函数，在java中有类似的功能，但我记得是匿名的，java还有内部类等
+            # 这里创建的函数，称为闭包，闭包是一个函数，它可以访问其词法作用域中的变量
             # 创建任务执行函数
             def task_func():
                 try:

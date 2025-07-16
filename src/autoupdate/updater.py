@@ -78,6 +78,9 @@ class Updater:
 
         # 云端同步的配置文件路径
         self.cloud_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cloud')
+
+        # 上面这个路径，不论函数在哪里被调用，返回的都是本文件的绝对路径，然后去掉了路径中的文件名
+        # 也就是本文件，最后返回的路径就是本文件同级目录下的cloud目录
         os.makedirs(self.cloud_dir, exist_ok=True)  # 确保目录存在
 
         self.version_file = os.path.join(self.cloud_dir, 'version.json')
@@ -124,6 +127,8 @@ class Updater:
         try:
             if os.path.exists(self.version_file):
                 with open(self.version_file, 'r', encoding='utf-8') as f:
+
+                    # 加载为json对象，然后返回version字段的值，并且给了默认值
                     data = json.load(f)
                     return data.get('version', '0.0.0')
         except Exception as e:
@@ -133,6 +138,7 @@ class Updater:
     def get_version_identifier(self) -> str:
         """获取版本标识符，用于 User-Agent"""
         try:
+            # os.path.exists判断文件或目录是否存在，存在返回True，不存在返回False
             if os.path.exists(self.version_file):
                 with open(self.version_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -190,6 +196,8 @@ class Updater:
                 timeout=10,
                 verify=True
             )
+
+            # raise_for_status()方法，用于检测http状态码，如果是2xx，静默放行，否则抛出HTTPError异常
             response.raise_for_status()
 
             cloud_announcement = response.json()
@@ -427,7 +435,7 @@ class Updater:
                         src_file = os.path.join(root, file)
                         dst_file = os.path.join(backup_dir, file_rel_path)
                         os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                        shutil.copy2(src_file, dst_file)
+                        # shutil.copy2(src_file, dst_file)
 
             return True
         except Exception as e:
@@ -456,7 +464,8 @@ class Updater:
                         src_file = os.path.join(root, file)
                         dst_file = os.path.join(self.root_dir, file_rel_path)
                         os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                        shutil.copy2(src_file, dst_file)
+                        # 禁止文件覆盖（强制取消备份恢复）
+                        # shutil.copy2(src_file, dst_file)
 
             return True
         except Exception as e:
@@ -531,9 +540,12 @@ class Updater:
 
                     # 如果文件有变化或不存在，则更新
                     if need_update:
-                        os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                        shutil.copy2(src_file, dst_file)
-                        updated_files.append(file_rel_path)
+                        pass
+                        # os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                        # 将新文件赋值到旧文件，并覆盖
+                        # 禁止文件覆盖（强制取消更新）
+                        # shutil.copy2(src_file, dst_file)
+                        # updated_files.append(file_rel_path)
 
             # 记录更新的文件列表
             if updated_files:

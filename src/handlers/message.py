@@ -27,6 +27,7 @@ from .debug import DebugCommandHandler
 logger = logging.getLogger('main')
 
 class MessageHandler:
+
     def __init__(self, root_dir, api_key, base_url, model, max_token, temperature,
                  max_groups, robot_name, prompt_content, image_handler, emoji_handler, voice_handler, memory_service):
         self.root_dir = root_dir
@@ -51,6 +52,8 @@ class MessageHandler:
         # 消息队列相关
         self.message_queues = {}  # 存储每个用户的消息队列，格式：{queue_key: queue_data}
         self.queue_timers = {}    # 存储每个用户的定时器，格式：{queue_key: timer}
+
+        # 这个等待时间，就是获取完消息后，等待多久才会处理消息（发微信），单位是秒
         self.QUEUE_TIMEOUT = config.behavior.message_queue.timeout  # 从配置中获取队列等待时间（秒）
         self.queue_lock = threading.Lock()
         self.chat_contexts = {}
@@ -73,6 +76,8 @@ class MessageHandler:
         self.debug_handler = DebugCommandHandler(
             root_dir=root_dir,
             memory_service=memory_service,
+
+            # 这里虽然在代码中，名字叫deepseek，但实际上是使用的大模型还是配置文件中指定的模型和APIKEY
             llm_service=self.deepseek
         )
         logger.info("调试命令处理器已初始化")
@@ -141,6 +146,8 @@ class MessageHandler:
             # 检查是否已经为该用户加载过上下文
             recent_context = None
             if user_id not in self.deepseek.chat_contexts:
+
+                # get_recent_context 这个函数其实就是获取了指定轮数的短期记忆
                 recent_context = self.memory_service.get_recent_context(avatar_name, user_id)
                 if recent_context:
                     logger.info(f"程序启动：为用户 {user_id} 加载 {len(recent_context)} 条历史上下文消息")
@@ -161,7 +168,9 @@ class MessageHandler:
             response = self.deepseek.get_response(
                 message=message,
                 user_id=user_id,
+                # system_prompt人设，combined_system_prompt 整个人设文件
                 system_prompt=combined_system_prompt,
+                # previous_context历史上下文，recent_context指定轮数的短期记忆
                 previous_context=recent_context,
                 core_memory=core_memory_prompt
             )
@@ -175,7 +184,11 @@ class MessageHandler:
     def handle_user_message(self, content: str, chat_id: str, sender_name: str,
                      username: str, is_group: bool = False, is_image_recognition: bool = False):
         """统一的消息处理入口"""
+
+        # 这个方法其实不算是消息入口，算是对消息的前置处理，
+        # 看消息是否为调试命令，这个函数主要是做这个的
         try:
+            # if is_group else 三元表达式来判断是否为群聊
             logger.info(f"收到消息 - 来自: {sender_name}" + (" (群聊)" if is_group else ""))
             logger.debug(f"消息内容: {content}")
 
@@ -207,14 +220,24 @@ class MessageHandler:
 
     def _add_to_message_queue(self, content: str, chat_id: str, sender_name: str,
                             username: str, is_group: bool, is_image_recognition: bool):
+
+        # queue_lock是python中的线程锁（threading.Lock()），和java中的lock锁类似，但语法不同，python中可以直接用
+        # with 锁
+            # 代码
+        # 这种形式直接调用，不用lock（）再unlock（），并且发现异常会自动释放锁，而java需要在finally中手动处理
         """添加消息到队列并设置定时器"""
         with self.queue_lock:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # 这个queue_key和消息队列的数据格式有关，message_queues中，用的是{queue_key: queue_data}
+            # 这种形式，这个chat_id是什么？
             queue_key = self._get_queue_key(chat_id, sender_name, is_group)
 
             # 初始化或更新队列
             if queue_key not in self.message_queues:
                 logger.info(f"[消息队列] 创建新队列 - 用户: {sender_name}" + (" (群聊)" if is_group else ""))
+
+                # 这里可以看到，queue_data是一个字典，主要是messages属性，是一个列表，后续消息后添加这个列表
                 self.message_queues[queue_key] = {
                     'messages': [f"[{current_time}]\n{content}"],  # 第一条消息带时间戳
                     'chat_id': chat_id,  # 保存原始chat_id用于发送消息
@@ -234,8 +257,11 @@ class MessageHandler:
                 logger.debug(f"[消息队列] 新增消息: {content[:50]}...")
 
             # 取消现有的定时器
+            # 也就是用户在发送消息后的8秒内再次发送消息时，会重置定时器
             if queue_key in self.queue_timers and self.queue_timers[queue_key]:
                 try:
+
+                    # cancel()方法用于取消尚未执行的定时器任务
                     self.queue_timers[queue_key].cancel()
                     logger.debug(f"[消息队列] 重置定时器 - 用户: {sender_name}")
                 except Exception as e:
@@ -243,6 +269,9 @@ class MessageHandler:
                 self.queue_timers[queue_key] = None
 
             # 创建新的定时器
+            # 这个定时器作用于wxauto，也就是等待多长时间开始发送微信消息
+            # 原项目推荐最少等待时间为8秒，否则有封号的风险
+            # _process_message_queue也就是发送消息的函数
             timer = threading.Timer(
                 self.QUEUE_TIMEOUT,
                 self._process_message_queue,
@@ -297,12 +326,16 @@ class MessageHandler:
                 logger.info("----------------------------------------")
 
                 # 检查合并后的消息是否包含时间提醒
+                # threading.Thread创建线程，target 要执行的函数 ，args 该函数需要的参数
+                # 从函数的调用来看，只有system发送的消息会直接返回，其他发送的消息都要调用大模型来检测是否包含时间提醒
+
                 threading.Thread(
                     target=self._check_time_reminder,
                     args=(combined_message, chat_id, sender_name)
                 ).start()
 
                 # 检查是否为特殊请求(注释掉了生图功能)
+                # 虽然原本代码的注释说注释掉了，但其实下面这段代码并没有注释
                 if self.voice_handler.is_voice_request(combined_message):
                     return self._handle_voice_request(combined_message, chat_id, sender_name, username, is_group)
                 elif self.image_handler.is_random_image_request(combined_message):
@@ -462,7 +495,16 @@ class MessageHandler:
 
         # 发送文本消息和表情
         if '$' in reply or '＄' in reply:
+
+            # parts = [
+            #     p.strip()  # 步骤3：去除每个片段首尾空白
+            #     for p in reply.replace("＄", "$")  # 步骤1：统一全角/半角符号
+            #     .split("$")  # 步骤2：用$分割字符串
+            #     if p.strip()  # 步骤4：过滤空字符串
+            # ]
+
             parts = [p.strip() for p in reply.replace("＄", "$").split("$") if p.strip()]
+
             for part in parts:
                 # 检查当前部分是否包含表情标签
                 emotion_tags = self.emoji_handler.extract_emotion_tags(part)
@@ -474,7 +516,12 @@ class MessageHandler:
                 for tag in emotion_tags:
                     clean_part = clean_part.replace(f'[{tag}]', '')
 
-                if clean_part.strip():
+                # 下面这个if，用于确保strip函数去除前后空白后，字符串不为空，也就是有 有效内容
+
+                # 这里我添加了判断消息是否包含括号的内容，强制剔除大模型返回的心理和动作描写
+                if clean_part.strip() and not clean_part.tartswith('（') and clean_part.endswith('）'):
+                # if clean_part.strip()
+
                     self.wx.SendMsg(msg=clean_part.strip(), who=chat_id)
                     logger.debug(f"发送消息: {clean_part[:20]}...")
 
@@ -500,7 +547,9 @@ class MessageHandler:
             for tag in emotion_tags:
                 clean_reply = clean_reply.replace(f'[{tag}]', '')
 
-            if clean_reply.strip():
+            # 这里我添加了判断消息是否包含括号的内容，强制剔除大模型返回的心理和动作描写
+            if clean_reply.strip() and not clean_part.tartswith('（') and clean_part.endswith('）'):
+            # if clean_reply.strip():
                 self.wx.SendMsg(msg=clean_reply.strip(), who=chat_id)
                 logger.debug(f"发送消息: {clean_reply[:20]}...")
 
@@ -531,7 +580,9 @@ class MessageHandler:
             return
 
         try:
-            # 使用 time_recognition 服务识别时间
+            # 使用 time_recognition 服务识别时间，
+            # 看起来这个时间识别服务是一个提醒闹钟，如给小爱同学说明天早上九点提醒我开会，然后会定一个闹钟，
+            # 而这个时间识别服务，会返回一个json时间，以及对应要做的事
             time_infos = self.time_recognition.recognize_time(content)
             if time_infos:
                 for target_time, reminder_content in time_infos:

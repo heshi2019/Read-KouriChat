@@ -40,7 +40,8 @@ class VoiceHandler:
             # 生成唯一的文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             voice_path = os.path.join(self.voice_dir, f"voice_{timestamp}.wav")
-            
+
+            # 这个 tts_api_url 在配置文件中，默认调用本地5000端口，
             # 调用TTS API
             response = requests.get(f"{self.tts_api_url}?text={text}", stream=True)
             if response.status_code == 200:

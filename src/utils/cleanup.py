@@ -12,6 +12,7 @@ import shutil
 import logging
 import time
 
+# 获取了日志记录器的名字，这里的名字是当前模块的名字，也就是src.utils.cleanup
 logger = logging.getLogger(__name__)
 
 class CleanupUtils:
@@ -29,8 +30,11 @@ class CleanupUtils:
                 return
                 
             max_retries = 3
+            # 在python中，for循环的循环变量并不需要初始化 如这里的attempt
+            # 而他的循环变量是 0,1,2 通过range函数产生
             for attempt in range(max_retries):
                 try:
+
                     files = os.listdir(self.wxauto_dir)
                     if not files:
                         logger.info("wxauto文件夹为空，无需清理")
@@ -39,15 +43,19 @@ class CleanupUtils:
                     deleted_count = 0
                     for file in files:
                         try:
+                            # 拼接文件路径
                             file_path = os.path.join(self.wxauto_dir, file)
                             if os.path.isfile(file_path):
                                 try:
+                                    # 如果文件存在，修改权限为777，防止无法删除
                                     os.chmod(file_path, 0o777)
                                 except:
                                     pass
+                                # 删除文件
                                 os.remove(file_path)
                                 deleted_count += 1
                             elif os.path.isdir(file_path):
+                                # 如果存在目录，直接递归删除
                                 shutil.rmtree(file_path, ignore_errors=True)
                                 deleted_count += 1
                         except PermissionError:
@@ -58,6 +66,7 @@ class CleanupUtils:
                             continue
                             
                     try:
+                        # 删除完文件夹中内容，将文件夹删除
                         if os.path.exists(self.wxauto_dir):
                             os.rmdir(self.wxauto_dir)
                             logger.info("成功删除wxauto文件夹")
@@ -147,11 +156,14 @@ class CleanupUtils:
 def cleanup_pycache():
     """递归清理所有__pycache__文件夹"""
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    
+
+    # os.walk，遍历给定的目录，并返回一个三元组 (dirpath, dirnames, filenames)，分别代表
+    # 路径，目录，文件
     for root, dirs, files in os.walk(root_dir):
         if '__pycache__' in dirs:
             pycache_path = os.path.join(root, '__pycache__')
             try:
+                # shutil内置库，rmtree递归删除
                 shutil.rmtree(pycache_path)
                 logger.info(f"已清理: {pycache_path}")
             except Exception as e:

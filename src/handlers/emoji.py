@@ -91,6 +91,7 @@ class EmojiHandler:
             # 确保截图目录存在
             os.makedirs(self.screenshot_dir, exist_ok=True)
 
+            # 一个文件路径，路径后的文件名为 发送者_当前时间.png
             screenshot_path = os.path.join(
                 self.screenshot_dir,
                 f'{who}_{datetime.now().strftime("%Y%m%d%H%M%S")}.png'
@@ -98,9 +99,12 @@ class EmojiHandler:
 
             try:
                 # 激活并定位微信聊天窗口
-                wx_chat = WeChat()
-                wx_chat.ChatWith(who)
-                chat_window = pyautogui.getWindowsWithTitle(who)[0]
+                wx_chat = WeChat() # 初始化微信控制对象
+                wx_chat.ChatWith(who) # 将微信窗口切换到指定用户的聊天界面
+
+                # pyautogui是 pyautogui 库的方法，PyAutoGUI 是一个跨平台的 GUI 自动化 Python 模块，主要用于实现鼠标/
+                # 该方法会返回所有标题包含指定字符串的窗口对象列表。在代码中通过索引 [0] 获取第一个匹配的窗口键盘控制和屏幕操作
+                chat_window = pyautogui.getWindowsWithTitle(who)[0]  # 通过窗口标题获取微信窗口句柄
 
                 # 确保窗口被前置和激活
                 if not chat_window.isActive:
@@ -114,6 +118,7 @@ class EmojiHandler:
                 time.sleep(1)  # 短暂等待确保窗口已激活
 
                 # 截取指定窗口区域的屏幕
+                # screenshot是截图方法，参数为截图区域的左上角坐标和宽高
                 screenshot = pyautogui.screenshot(region=(x, y, width, height))
                 screenshot.save(screenshot_path)
                 logger.info(f'已保存截图: {screenshot_path}')

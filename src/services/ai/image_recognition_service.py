@@ -32,9 +32,17 @@ class ImageRecognitionService:
         self.headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
+
+            # 这里的请求头为什么要设置项目名称、项目版本？
             'User-Agent': version_identifier,
             'X-KouriChat-Version': version
         }
+
+        # 这个model，是类变量，是一个
+        # 卧槽了，这个变量调用真是，model变量在创建本类对象的时候传入，而model本身是config文件中，
+        # 取的图箱式变model的value值
+        # 在main文件中，本类被chatbox调用，chatbox调用本类时，传入了本类需要的各种值，
+        # 而本类的各种值是从config文件中获取的，于是又有一个config类来操作config文件，我糙了
         self.model = model  # "moonshot-v1-8k-vision-preview"
 
         if temperature > 1.0:
@@ -56,16 +64,20 @@ class ImageRecognitionService:
 
             # 读取并编码图片
             try:
+                # 'rb'   二进制读取模式
                 with open(image_path, 'rb') as img_file:
+                    # 转为base64编码
                     image_content = base64.b64encode(img_file.read()).decode('utf-8')
             except Exception as e:
                 logger.error(f"读取图片文件失败: {str(e)}")
                 return "抱歉，读取图片时出现错误"
 
             # 设置提示词
+
+            # 为真返回，条件判断，为假返回  这是python中的三元表达式，这怎么这么怪呢
             text_prompt = "请描述这个图片" if not is_emoji else "这是一张微信聊天的图片截图，请描述这个聊天窗口左边的聊天用户用户发送的最后一张表情，不要去识别聊天用户的头像"
 
-            # 准备请求数据
+            # 准备请求数据，这里是调用格式，按道理来说这个只是月之暗面的调用格式
             data = {
                 "model": self.model,
                 "messages": [
@@ -113,6 +125,11 @@ class ImageRecognitionService:
                 # 处理表情包识别结果
                 if is_emoji:
                     if "最后一张表情包是" in recognized_text:
+
+                        # 这个split("最后一张表情包是", 1)[1]，用这个字符串分割原本的字符串，最大分割次数为1，
+                        # 然后取分割后的第二个部分
+                        # 如 原本为 最后一张表情包是一只戴着墨镜的柴犬，表情很拽"
+                        # 截取之后为 ["", "一只戴着墨镜的柴犬，表情很拽"]  去掉了指定字符之前的
                         recognized_text = recognized_text.split("最后一张表情包是", 1)[1].strip()
                     recognized_text = "用户发送了一张表情包，表情包的内容是：：" + recognized_text
                 else:
@@ -135,6 +152,8 @@ class ImageRecognitionService:
             logger.error(f"图片识别过程失败: {str(e)}", exc_info=True)
             return "抱歉，图片识别过程出现错误"
 
+    # 这个调用图像识别的类好混乱，下面这个函数看起来是想做一个统一的调用接口，但之前的函数却都没用
+    # 都是直接写在函数里面调用
     def chat_completion(self, messages: list, **kwargs) -> Optional[str]:
         """发送聊天请求到 Moonshot AI"""
         try:

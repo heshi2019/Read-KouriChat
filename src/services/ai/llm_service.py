@@ -62,9 +62,12 @@ class LLMService:
             "temperature": temperature,
             "max_groups": max_groups,
         }
+
+        # 上下文管理器是一个字典，里面的value再套一个list，list里面再套一个字典
         self.chat_contexts: Dict[str, List[Dict]] = {}
 
         # 安全字符白名单（可根据需要扩展）
+        # 这个正则表达式匹配一些空白字符，隐藏空格， 控制字符等影响文本显示的字符
         self.safe_pattern = re.compile(r'[\x00-\x1F\u202E\u200B]')
 
         # 如果是 Ollama，获取可用模型列表
@@ -81,15 +84,20 @@ class LLMService:
         :param message: 消息内容
         :param role: 角色类型(user/assistant)
         """
+
+        # 给用户在上下文管理器初始化
         if user_id not in self.chat_contexts:
             self.chat_contexts[user_id] = []
 
         # 添加新消息
+        # 给用户的字典中，用append添加了一个list元素，而list里面的元素是字典
         self.chat_contexts[user_id].append({"role": role, "content": message})
 
         # 维护上下文窗口
+        # 看配置，最大上下文是15，这里*2 也就是超过30条消息就开始清理
         while len(self.chat_contexts[user_id]) > self.config["max_groups"] * 2:
             # 优先保留最近的对话组
+            # 这里还是用了python中的 -负号 和 ：冒号来截取列表数据
             self.chat_contexts[user_id] = self.chat_contexts[user_id][-self.config["max_groups"]*2:]
 
     def _sanitize_response(self, raw_text: str) -> str:
@@ -100,6 +108,8 @@ class LLMService:
         3. 防止字符串截断异常
         """
         try:
+            # re.sub  python中，匹配正则表达式，用指定内容替换
+            # raw_text原始文本，self.safe_pattern 正则表达式，'' 替换内容，
             cleaned = re.sub(self.safe_pattern, '', raw_text)
             return cleaned.replace('\r\n', '\n').replace('\r', '\n')
         except Exception as e:
@@ -125,7 +135,9 @@ class LLMService:
             # 查找三个连续换行符
             triple_newline_match = re.search(r'\n\n\n', filtered_content)
             if triple_newline_match:
+
                 # 只保留三个连续换行符后面的内容（最终回复）
+                # triple_newline_match.end() 返回的是匹配到的字符串的结束位置，
                 filtered_content = filtered_content[triple_newline_match.end():]
 
             return filtered_content.strip()
@@ -144,6 +156,7 @@ class LLMService:
             logger.debug(f"API响应结构: {json.dumps(response, default=str, indent=2)}")
             
             # 尝试获取回复内容
+            # 这里验证了下响应的格式，是否和预期格式一致
             if isinstance(response, dict):
                 choices = response.get("choices", [])
                 if choices and isinstance(choices, list):
@@ -189,12 +202,14 @@ class LLMService:
 
             # —— 阶段2：上下文更新 ——
             # 只在程序刚启动时（上下文为空时）加载外部历史上下文
+            # 这里添加的历史上下文，就是短期记忆
             if previous_context and user_id not in self.chat_contexts:
                 logger.info(f"程序启动初始化：为用户 {user_id} 加载历史上下文，共 {len(previous_context)} 条消息")
                 # 确保上下文只包含当前用户的历史信息
                 self.chat_contexts[user_id] = previous_context.copy()
 
             # 添加当前消息到上下文
+            # 将当前消息添加到上下文，并且维护上下文窗口，只保留30条消息
             self._manage_context(user_id, message)
 
             # —— 阶段3：构建请求参数 ——
@@ -203,6 +218,8 @@ class LLMService:
                 # 从当前文件位置(llm_service.py)向上导航到项目根目录
                 current_dir = os.path.dirname(os.path.abspath(__file__))  # src/services/ai
                 project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))  # 项目根目录
+
+                # 这个base文件，就像人设中的备注部分，是对大模型输出内容的一些限制
                 base_prompt_path = os.path.join(project_root, "data", "base", "base.md")
 
                 with open(base_prompt_path, "r", encoding="utf-8") as f:
@@ -213,6 +230,9 @@ class LLMService:
 
             # 构建完整提示词: base + 核心记忆 + 人设
             if core_memory:
+                # system_prompt 人设，这里看到，每次请求都是携带的完整人设，也就是说，大模型每次的回答
+                # 其实是当场根据人设编出来的，这样导致大模型的回答其实很肤浅，所以加入了核心记忆
+                # 但这种方式其实，不是很好，大模型没有持续对话，无法模拟出真人对话的持续和流畅感
                 final_prompt = f"{base_content}\n\n{core_memory}\n\n{system_prompt}"
                 logger.debug("提示词顺序：base.md + 核心记忆 + 人设")
             else:
@@ -222,17 +242,30 @@ class LLMService:
             # 构建消息列表
             messages = [
                 {"role": "system", "content": final_prompt},
+
+                # * 这个星号是python的解包操作，这里的get出来是一个list，里面的元素是字典，
+                # 也就是[dict1，dict2，……]这样，解包之后，就变成了dict1，dict2，……
+                # [-self.config["max_groups"] * 2:]  还是经典的list截取指定条记录的操作
+
+                # 最后 messages 就是 [dict1，dict2，……] 这样的数据结构
+
+                # 由于上面将当前用户输入的消息添加到了上下文，因此这里的messages，包含人设，核心记忆，问题等
+
                 *self.chat_contexts.get(user_id, [])[-self.config["max_groups"] * 2:]
             ]
 
             # 为 Ollama 构建消息内容
             chat_history = self.chat_contexts.get(user_id, [])[-self.config["max_groups"] * 2:]
             history_text = "\n".join([
+
+                # 这个遍历是倒过来的，先写语句，再写for
+                # 最后这个字符串就是这样的，用户名:消息，用户名:消息，……
                 f"{msg['role']}: {msg['content']}"
                 for msg in chat_history
             ])
             ollama_message = {
                 "role": "user",
+                #下面三个变量分别对应  人设+核心记忆，对话历史，最新一次用户输入
                 "content": f"{final_prompt}\n\n对话历史：\n{history_text}\n\n用户问题：{message}"
             }
 
@@ -254,7 +287,9 @@ class LLMService:
                     "messages": [ollama_message],  # 将消息包装在列表中
                     "stream": False,
                     "options": {
+                        # temperature 大模型温度
                         "temperature": self.config["temperature"],
+                        # max_tokens 大模型最大生成的token数
                         "max_tokens": self.config["max_token"]
                     }
                 }
@@ -275,7 +310,12 @@ class LLMService:
                             "X-KouriChat-Version": version
                         }
                     )
+
+                    # raise_for_status自动检查http响应的状态码，
+                    # 当 HTTP 状态码为 200-299 时：静默通过
+                    # 当状态码为 400-599 时：抛出 requests.exceptions.HTTPError 异常
                     response.raise_for_status()
+
                     response_data = response.json()
 
                     # 检查响应中是否包含 message 字段
@@ -290,7 +330,9 @@ class LLMService:
                     else:
                         raise ValueError(f"错误的API响应结构: {json.dumps(response_data, default=str)}")
 
+                    # 剔除影响文本显示的内容
                     clean_content = self._sanitize_response(raw_content)
+
                     # 过滤思考内容
                     filtered_content = self._filter_thinking_content(clean_content)
 
@@ -306,6 +348,12 @@ class LLMService:
                 }
 
                 # 使用 OpenAI 客户端发送请求
+                # ** 双星，专门用于解包字典，将字典中的键值对作为关键字参数传递给函数
+                # 比如http需要参数model，正常可能要写  "model"：request_config["model"] 这样，
+                # 但双星号就能直接给 http 赋值需要的字典参数
+
+                # self.client初始化了一个openai的客户端，
+                # .chat.completions.create 是调用openai客户端的方法
                 response = self.client.chat.completions.create(**request_config)
                     
                 # 验证 API 响应结构

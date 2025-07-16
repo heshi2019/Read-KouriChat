@@ -21,7 +21,7 @@ from colorama import init, Style
 from src.AutoTasker.autoTasker import AutoTasker
 from src.handlers.autosend import AutoSendHandler
 
-# 创建一个事件对象来控制线程的终止
+# 创建一个事件对象来控制线程的终止,用来安全退出线程
 stop_event = threading.Event()
 
 # 获取项目根目录
@@ -63,12 +63,18 @@ class ChatBot:
         self.robot_name = self.wx.A_MyIcon.Name  # 使用Name属性而非方法
         logger.info(f"机器人名称: {self.robot_name}")
 
+    # is_group = False 给参数一个默认值
     def handle_wxauto_message(self, msg, chatName, is_group=False):
         try:
             username = msg.sender
+
+            # 提取消息内容
+            # 这里使用了getattr方法，他是python的一个内置方法，用于获取对象的属性值
+            # msg 要访问的对象，content 对象的属性名，None，如果属性不存在，返回的默认值
             content = getattr(msg, 'content', None) or getattr(msg, 'text', None)
 
-            # 重置倒计时
+            # 重置倒计时，本项目有一个功能是，在指定多少时间后，机器人自动发送消息给用户
+            # 这里的倒计时就是这个功能
             self.auto_sender.start_countdown()
 
             # 简化日志输出
@@ -81,21 +87,32 @@ class ChatBot:
 
             # 处理群聊@消息
             if is_group and self.robot_name and content:
+                # re.sub是正则表达式替换函数，原本字符串为 content ，要替换内容为@机器人名称空格
+                # 替换为''  strip() 替换字符串前后的空格
                 content = re.sub(f'@{self.robot_name}\u2005', '', content).strip()
 
+            # content.lower()将字符串转换为小写
+            # .endswith，检查字符串是否以指定后缀结尾
+            # 这个if是用来判断消息是否为图片的，但现在不知道wxauto对图片，和单独表情包，在消息中是怎么返回的
             if content and content.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
                 img_path = content
                 is_emoji = False
                 content = None
 
-            # 检查动画表情
+            # 检查动画表情 这里为什么要检查 [动画表情] 这个字符串，难道wxauto无法获取消息中的表情？
             if content and "[动画表情]" in content:
+                # 这里截图了整个聊天窗口，保存，返回了保存路径
                 img_path = self.emoji_handler.capture_and_save_screenshot(username)
                 is_emoji = True
                 content = None
 
             if img_path:
+
+                # 调用图片识别服务，返回识别结果，这里将要识别的图片路径传入，第二个参数判断为图片还是表情
+                # 主要影响在调用图片识别服务时的提示词
                 recognized_text = self.image_recognition_service.recognize_image(img_path, is_emoji)
+
+                # 这里检查了消息内容是否为空，因为用户可能只发一张图片
                 content = recognized_text if content is None else f"{content} {recognized_text}"
                 is_image_recognition = True
 
@@ -121,7 +138,8 @@ prompt_path = os.path.join(avatar_dir, "avatar.md")
 with open(prompt_path, "r", encoding="utf-8") as file:
     prompt_content = file.read()
 
-# 创建全局实例
+# 创建全局实例  这里可以看到，python创建实例的方法和java不一样，他可以用调用函数的形式
+# 直接创建实例
 emoji_handler = EmojiHandler(root_dir)
 image_handler = ImageHandler(
     root_dir=root_dir,
@@ -182,24 +200,37 @@ auto_sender.start_countdown()
 def message_listener():
     wx = None
     last_window_check = 0
+    # 十分钟，600秒
     check_interval = 600
 
+    # stop_event.is_set() 来检测线程是否退出了
     while not stop_event.is_set():
         try:
             current_time = time.time()
 
+            # 如果微信实例未创建  wx is None
+            # 或者  距离上次检查窗口时间超过了指定间隔  current_time(当前时间) - last_window_check(上次检查时间) > check_interval(大于10分钟)
             if wx is None or (current_time - last_window_check > check_interval):
                 wx = WeChat()
+
+                # wx.GetSessionList用于验证微信客户端，是否正常登录，是否处于前台，是否可用
                 if not wx.GetSessionList():
+                    # python中，只有下面的这一种方式来休眠线程，无法通过线程名.sleep来控制线程
                     time.sleep(5)
+
+                    # 如果微信没有正常登录等，跳过本次循环
                     continue
                 last_window_check = current_time
 
+            # 微信消息监听
             msgs = wx.GetListenMessage()
             if not msgs:
+                # 暂停一秒，重新循环
+                # 这个暂停一秒，即可以防止长时间占用cpu，也能防止频繁调用微信
                 time.sleep(wait)
                 continue
 
+            # wxauto中的chat，就相当于一个独立的微信聊天窗口
             for chat in msgs:
                 who = chat.who
                 if not who:
@@ -211,8 +242,10 @@ def message_listener():
 
                 for msg in one_msgs:
                     try:
+                        # 这是wxauto的内容，type，获取消息类型，content，获取消息内容
                         msgtype = msg.type
                         content = msg.content
+
                         if not content:
                             continue
                         if msgtype != 'friend':
@@ -245,6 +278,8 @@ def initialize_wx_listener():
 
     for attempt in range(max_retries):
         try:
+            # WeChat这个方法是这个项目作者的另一个项目，叫wxauto，使用了windows的组件来模拟鼠标键盘操作
+            # 来操作微信
             wx = WeChat()
             if not wx.GetSessionList():
                 logger.error("未检测到微信会话列表，请确保微信已登录")
@@ -359,8 +394,17 @@ def main():
 
         # 验证记忆目录
         print_status("验证角色记忆存储路径...", "info", "FILE")
+
+        # config.behavior.context.avatar_dir
+        # 这个路径要到config文件夹的init文件中，先找类变量behavior ，再找这个类变量的赋值类在哪里，
+        # 再找这个类的赋值过程，这里会找到最后对应的config文件
         avatar_dir = os.path.join(root_dir, config.behavior.context.avatar_dir)
+
+        # basename 用于提取路径中最后的文件名或目录名
+        # 其实也就是config.behavior.context.avatar_dir路径最后的角色名称文件夹
         avatar_name = os.path.basename(avatar_dir)
+
+        # 角色记忆目录
         memory_dir = os.path.join(avatar_dir, "memory")
         if not os.path.exists(memory_dir):
             os.makedirs(memory_dir)
@@ -369,7 +413,7 @@ def main():
         # 初始化记忆文件 - 为每个监听用户创建独立的记忆文件
         print_status("初始化记忆文件...", "info", "FILE")
 
-        # 为每个监听的用户创建独立记忆
+        # 为每个监听的用户创建独立记忆，这里只是创建了对应目录和json文件
         for user_name in listen_list:
             print_status(f"为用户 '{user_name}' 创建独立记忆...", "info", "USER")
             # 使用用户名作为用户ID
